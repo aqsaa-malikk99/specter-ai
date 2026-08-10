@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.agents.deadline import build_ics
 from app.db import get_db, init_db
 from app.graph import pipeline
-from app.models import Contract
+from app.models import ClientProfile, Contract
 
 app = FastAPI(title="Contract Renewal & Risk Radar")
 
@@ -32,10 +32,12 @@ async def upload_contract(
         )
 
     result = pipeline.invoke(
-        {"contract_text": contract_text, "provider": provider, "model": model}
+        {"contract_text": contract_text, "provider": provider, "model": model, "db": db}
     )
 
     contract = Contract(
+        client_profile_id=result["client_profile_id"],
+        is_renewal_of=result.get("is_renewal_of"),
         raw_text=contract_text,
         contract_type=result["intake"].contract_type,
         parties=result["intake"].parties,
@@ -43,6 +45,7 @@ async def upload_contract(
         term_length_months=result["intake"].term_length_months,
         extracted_clauses=result["clauses"].model_dump(),
         deadline=result["deadline"].model_dump(),
+        diff=result["diff"].model_dump() if result.get("diff") else None,
     )
     db.add(contract)
     db.commit()
@@ -50,10 +53,26 @@ async def upload_contract(
 
     return {
         "contract_id": contract.id,
+        "client_profile_id": contract.client_profile_id,
+        "is_renewal_of": contract.is_renewal_of,
         "intake": result["intake"],
         "clauses": result["clauses"],
+        "diff": result.get("diff"),
         "deadline": result["deadline"],
     }
+
+
+@app.get("/clients")
+def list_clients(db: Session = Depends(get_db)):
+    return db.query(ClientProfile).all()
+
+
+@app.get("/clients/{client_id}/contracts")
+def list_client_contracts(client_id: str, db: Session = Depends(get_db)):
+    client = db.get(ClientProfile, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return client.contracts
 
 
 @app.get("/contracts/{contract_id}")

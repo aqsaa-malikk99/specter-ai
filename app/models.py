@@ -40,6 +40,7 @@ class Contract(Base):
 
     extracted_clauses: Mapped[list | None] = mapped_column(JSON, nullable=True)
     deadline: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    diff: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

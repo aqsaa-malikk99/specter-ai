@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -33,3 +35,17 @@ class DeadlineResult(BaseModel):
     cancel_by_date: str | None = Field(default=None, description="ISO date - the actual must-cancel-by date, computed from effective_date + term_length_months - notice_window_days")
     reminder_dates: list[str] = Field(default_factory=list, description="ISO dates for 90/30/7 day reminders before cancel_by_date")
     reasoning: str = Field(description="One or two sentences showing the date arithmetic")
+
+
+class ClauseDiff(BaseModel):
+    clause_type: str = Field(description="e.g. 'auto_renewal', 'indemnification', 'liability_cap'")
+    old_value: str = Field(description="Plain-English summary of the clause in the prior contract version")
+    new_value: str = Field(description="Plain-English summary of the clause in the new contract version")
+    materiality: Literal["cosmetic", "substantive"] = Field(
+        description="'cosmetic' if reworded-but-equivalent, 'substantive' if the actual rights/obligations changed"
+    )
+
+
+class DiffResult(BaseModel):
+    changes: list[ClauseDiff] = Field(default_factory=list, description="Only clauses that actually changed between versions")
+    summary: str = Field(description="One or two sentence plain-English summary of what changed overall")
