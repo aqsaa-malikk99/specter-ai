@@ -10,9 +10,17 @@ from typing import Any, TypedDict
 from langgraph.graph import END, StateGraph
 from sqlalchemy.orm import Session
 
-from app.agents import deadline, diff, extraction, intake
-from app.agents.schemas import ClauseExtractionResult, DeadlineResult, DiffResult, IntakeResult
+from app.agents import deadline, diff, extraction, intake, notify, risk
+from app.agents.schemas import (
+    ClauseExtractionResult,
+    DeadlineResult,
+    DiffResult,
+    DraftEmail,
+    IntakeResult,
+    RiskAssessmentResult,
+)
 from app.services.client_matching import find_or_create_client_profile
+from app.services.playbook import load_playbook
 from app.services.renewal_detection import find_prior_contract
 
 
@@ -29,7 +37,9 @@ class PipelineState(TypedDict, total=False):
 
     clauses: ClauseExtractionResult
     diff: DiffResult | None
+    risk: RiskAssessmentResult
     deadline: DeadlineResult
+    draft_email: DraftEmail
 
 
 def _run_intake(state: PipelineState) -> dict[str, Any]:
@@ -54,7 +64,7 @@ def _run_extraction(state: PipelineState) -> dict[str, Any]:
 
 
 def _has_prior_version(state: PipelineState) -> str:
-    return "diff" if state.get("prior_clauses") else "deadline"
+    return "diff" if state.get("prior_clauses") else "risk"
 
 
 def _run_diff(state: PipelineState) -> dict[str, Any]:
@@ -67,6 +77,16 @@ def _run_diff(state: PipelineState) -> dict[str, Any]:
     return {"diff": result}
 
 
+def _run_risk(state: PipelineState) -> dict[str, Any]:
+    result = risk.run(
+        clauses=state["clauses"],
+        playbook=load_playbook(),
+        provider=state.get("provider"),
+        model=state.get("model"),
+    )
+    return {"risk": result}
+
+
 def _run_deadline(state: PipelineState) -> dict[str, Any]:
     result = deadline.compute_deadline(
         effective_date=state["intake"].effective_date,
@@ -76,22 +96,39 @@ def _run_deadline(state: PipelineState) -> dict[str, Any]:
     return {"deadline": result}
 
 
+def _run_notify(state: PipelineState) -> dict[str, Any]:
+    result = notify.run(
+        intake=state["intake"],
+        clauses=state["clauses"],
+        diff=state.get("diff"),
+        risk=state["risk"],
+        deadline=state["deadline"],
+        provider=state.get("provider"),
+        model=state.get("model"),
+    )
+    return {"draft_email": result}
+
+
 def build_pipeline():
     graph = StateGraph(PipelineState)
     graph.add_node("intake", _run_intake)
     graph.add_node("match_client", _run_match_client)
     graph.add_node("extraction", _run_extraction)
     graph.add_node("diff", _run_diff)
+    graph.add_node("risk", _run_risk)
     graph.add_node("deadline", _run_deadline)
+    graph.add_node("notify", _run_notify)
 
     graph.set_entry_point("intake")
     graph.add_edge("intake", "match_client")
     graph.add_edge("match_client", "extraction")
     graph.add_conditional_edges(
-        "extraction", _has_prior_version, {"diff": "diff", "deadline": "deadline"}
+        "extraction", _has_prior_version, {"diff": "diff", "risk": "risk"}
     )
-    graph.add_edge("diff", "deadline")
-    graph.add_edge("deadline", END)
+    graph.add_edge("diff", "risk")
+    graph.add_edge("risk", "deadline")
+    graph.add_edge("deadline", "notify")
+    graph.add_edge("notify", END)
 
     return graph.compile()
 

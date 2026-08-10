@@ -1,0 +1,25 @@
+MASTER SUBSCRIPTION AGREEMENT
+
+This Master Subscription Agreement ("Agreement") is entered into as of January 15, 2025
+("Effective Date") between Vendor Cloud Services Inc. ("Vendor") and Acme Manufacturing Co.
+("Customer").
+
+1. TERM. This Agreement shall commence on the Effective Date and continue for an initial
+term of twelve (12) months (the "Initial Term"). Following the Initial Term, this Agreement
+shall automatically renew for successive twelve (12) month periods unless either party gives
+the other written notice of non-renewal at least ninety (90) days prior to the end of the
+then-current term.
+
+2. INDEMNIFICATION. Customer shall indemnify, defend, and hold harmless Vendor from and
+against any and all claims, damages, liabilities, costs, and expenses arising out of
+Customer's use of the Services. Vendor shall have no obligation to indemnify Customer under
+any circumstances.
+
+3. LIMITATION OF LIABILITY. IN NO EVENT SHALL EITHER PARTY'S TOTAL LIABILITY EXCEED THE FEES
+PAID BY CUSTOMER IN THE TWELVE (12) MONTHS PRECEDING THE CLAIM.
+
+4. TERMINATION. Either party may terminate this Agreement for material breach if such
+breach remains uncured thirty (30) days after written notice.
+
+5. CONFIDENTIALITY. Each party's confidential information shall remain confidential for a
+period of three (3) years following termination of this Agreement.

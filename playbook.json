@@ -1,0 +1,27 @@
+[
+  {
+    "clause_type": "liability_cap",
+    "rule": "A liability cap must be present. Absence of any cap is unacceptable.",
+    "rationale": "Uncapped liability exposes the client to unbounded damages from a single dispute."
+  },
+  {
+    "clause_type": "indemnification",
+    "rule": "Indemnification should be mutual, not one-sided in favor of the counterparty.",
+    "rationale": "One-sided indemnification shifts all risk of third-party claims onto the client regardless of fault."
+  },
+  {
+    "clause_type": "auto_renewal",
+    "rule": "The cancellation notice window must be at least 30 days. Notice windows shorter than 30 days, or windows longer than 120 days, should be flagged.",
+    "rationale": "Sub-30-day windows are easy to miss operationally; 120+ day windows lock the client in far earlier than typical renewal planning cycles."
+  },
+  {
+    "clause_type": "confidentiality",
+    "rule": "Confidentiality obligations should not survive termination for more than 5 years (60 months) unless the subject matter is trade secrets.",
+    "rationale": "Indefinite or excessively long confidentiality tails create open-ended compliance risk."
+  },
+  {
+    "clause_type": "termination_rights",
+    "rule": "The client should have a termination-for-convenience right or, at minimum, a termination-for-breach right with a reasonable cure period.",
+    "rationale": "Without either, the client is locked into the full term regardless of the counterparty's performance."
+  }
+]

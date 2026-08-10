@@ -49,3 +49,20 @@ class ClauseDiff(BaseModel):
 class DiffResult(BaseModel):
     changes: list[ClauseDiff] = Field(default_factory=list, description="Only clauses that actually changed between versions")
     summary: str = Field(description="One or two sentence plain-English summary of what changed overall")
+
+
+class RiskFlag(BaseModel):
+    clause_type: str
+    issue: str = Field(description="Plain-English description of why this falls outside the playbook, or why confidence was too low to trust")
+    severity: Literal["info", "warn", "critical"]
+
+
+class RiskAssessmentResult(BaseModel):
+    flags: list[RiskFlag] = Field(default_factory=list)
+    summary: str = Field(description="One or two sentence overall risk summary")
+
+
+class DraftEmail(BaseModel):
+    subject: str
+    body: str = Field(description="Plain-text email body summarizing the changelog, flagged risks, and upcoming deadline")
+    status: Literal["draft_awaiting_approval"] = "draft_awaiting_approval"

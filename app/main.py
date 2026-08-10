@@ -46,6 +46,8 @@ async def upload_contract(
         extracted_clauses=result["clauses"].model_dump(),
         deadline=result["deadline"].model_dump(),
         diff=result["diff"].model_dump() if result.get("diff") else None,
+        risk_flags=result["risk"].model_dump(),
+        draft_email=result["draft_email"].model_dump(),
     )
     db.add(contract)
     db.commit()
@@ -58,7 +60,9 @@ async def upload_contract(
         "intake": result["intake"],
         "clauses": result["clauses"],
         "diff": result.get("diff"),
+        "risk": result["risk"],
         "deadline": result["deadline"],
+        "draft_email": result["draft_email"],
     }
 
 
