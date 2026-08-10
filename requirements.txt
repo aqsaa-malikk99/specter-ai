@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+pydantic-settings
+langgraph
+langchain-core
+langchain-anthropic
+langchain-google-genai
+python-dotenv
+python-multipart
+python-dateutil
+ics
