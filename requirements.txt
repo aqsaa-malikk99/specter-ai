@@ -11,3 +11,4 @@ python-dotenv
 python-multipart
 python-dateutil
 ics
+pypdf

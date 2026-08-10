@@ -1,7 +1,7 @@
 from langchain_core.prompts import ChatPromptTemplate
 
 from app.agents.schemas import IntakeResult
-from app.llm_gateway import get_llm
+from app.llm_gateway import get_llm, invoke_structured
 
 SYSTEM_PROMPT = """You are the Intake & Classification Agent in a contract review pipeline.
 Given raw contract text, extract the contracting parties, contract type, effective date,
@@ -16,7 +16,8 @@ _prompt = ChatPromptTemplate.from_messages(
 )
 
 
-def run(contract_text: str, provider: str | None = None, model: str | None = None) -> IntakeResult:
-    llm = get_llm(provider, model).with_structured_output(IntakeResult)
-    chain = _prompt | llm
-    return chain.invoke({"contract_text": contract_text})
+def run(
+    contract_text: str, provider: str | None = None, model: str | None = None
+) -> tuple[IntakeResult, dict]:
+    llm = get_llm(provider, model)
+    return invoke_structured(_prompt, llm, IntakeResult, {"contract_text": contract_text})

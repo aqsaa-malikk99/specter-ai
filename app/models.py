@@ -32,6 +32,15 @@ class Contract(Base):
         ForeignKey("contracts.id"), nullable=True
     )
 
+    # Pipeline lifecycle: created "processing" immediately on upload, then
+    # updated after every single graph stage - not just at the end - so a
+    # dropped connection or a mid-run crash loses nothing already computed.
+    status: Mapped[str] = mapped_column(String, default="processing")  # processing | completed | failed
+    current_stage: Mapped[str | None] = mapped_column(String, nullable=True)
+    error: Mapped[str | None] = mapped_column(String, nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String, nullable=True)
+
     raw_text: Mapped[str] = mapped_column(String)
     contract_type: Mapped[str | None] = mapped_column(String, nullable=True)
     parties: Mapped[list | None] = mapped_column(JSON, nullable=True)
@@ -69,4 +78,7 @@ class AuditLog(Base):
     input_hash: Mapped[str] = mapped_column(String)
     output: Mapped[dict] = mapped_column(JSON)
     confidence: Mapped[float | None] = mapped_column(nullable=True)
+    input_tokens: Mapped[int | None] = mapped_column(nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(nullable=True)
+    performed_by: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

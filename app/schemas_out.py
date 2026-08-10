@@ -9,6 +9,11 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
 class ClientProfileOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -21,6 +26,10 @@ class ContractOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    status: str
+    current_stage: str | None
+    error: str | None
+    created_by: str | None
     client_profile_id: str | None
     is_renewal_of: str | None
     contract_type: str | None
@@ -39,8 +48,43 @@ class AuditLogOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    contract_id: str | None
     agent_name: str
     input_hash: str
     output: dict
     confidence: float | None
+    input_tokens: int | None
+    output_tokens: int | None
+    performed_by: str | None
     created_at: datetime
+
+
+class AuditHistoryEntryOut(BaseModel):
+    """A single audit row enriched with contract/client context, for the
+    cross-client history panel (a bare AuditLogOut isn't identifiable on
+    its own once you're looking across many contracts)."""
+
+    id: str
+    contract_id: str | None
+    client_name: str | None
+    contract_type: str | None
+    agent_name: str
+    confidence: float | None
+    input_tokens: int | None
+    output_tokens: int | None
+    performed_by: str | None
+    created_at: datetime
+
+
+class UsageByAgent(BaseModel):
+    agent_name: str
+    calls: int
+    input_tokens: int
+    output_tokens: int
+
+
+class UsageSummaryOut(BaseModel):
+    total_calls: int
+    total_input_tokens: int
+    total_output_tokens: int
+    by_agent: list[UsageByAgent]

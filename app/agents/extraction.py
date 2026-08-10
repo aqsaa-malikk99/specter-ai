@@ -1,7 +1,7 @@
 from langchain_core.prompts import ChatPromptTemplate
 
 from app.agents.schemas import ClauseExtractionResult
-from app.llm_gateway import get_llm
+from app.llm_gateway import get_llm, invoke_structured
 
 SYSTEM_PROMPT = """You are the Clause Extraction Agent in a contract review pipeline.
 Extract the following risk-relevant clauses from the contract text, each with a confidence
@@ -19,7 +19,8 @@ _prompt = ChatPromptTemplate.from_messages(
 )
 
 
-def run(contract_text: str, provider: str | None = None, model: str | None = None) -> ClauseExtractionResult:
-    llm = get_llm(provider, model).with_structured_output(ClauseExtractionResult)
-    chain = _prompt | llm
-    return chain.invoke({"contract_text": contract_text})
+def run(
+    contract_text: str, provider: str | None = None, model: str | None = None
+) -> tuple[ClauseExtractionResult, dict]:
+    llm = get_llm(provider, model)
+    return invoke_structured(_prompt, llm, ClauseExtractionResult, {"contract_text": contract_text})

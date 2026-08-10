@@ -9,7 +9,7 @@ import json
 from langchain_core.prompts import ChatPromptTemplate
 
 from app.agents.schemas import ClauseExtractionResult, DiffResult
-from app.llm_gateway import get_llm
+from app.llm_gateway import get_llm, invoke_structured
 
 SYSTEM_PROMPT = """You are the Diff Agent in a contract review pipeline. You are given the
 extracted clause values from two versions of the same contract - a prior version and a new
@@ -37,13 +37,15 @@ def run(
     new_clauses: ClauseExtractionResult,
     provider: str | None = None,
     model: str | None = None,
-) -> DiffResult:
+) -> tuple[DiffResult, dict]:
     old_json = old_clauses if isinstance(old_clauses, dict) else old_clauses.model_dump()
-    llm = get_llm(provider, model).with_structured_output(DiffResult)
-    chain = _prompt | llm
-    return chain.invoke(
+    llm = get_llm(provider, model)
+    return invoke_structured(
+        _prompt,
+        llm,
+        DiffResult,
         {
             "old_clauses": json.dumps(old_json, indent=2),
             "new_clauses": json.dumps(new_clauses.model_dump(), indent=2),
-        }
+        },
     )

@@ -10,7 +10,7 @@ import json
 from langchain_core.prompts import ChatPromptTemplate
 
 from app.agents.schemas import ClauseExtractionResult, RiskAssessmentResult
-from app.llm_gateway import get_llm
+from app.llm_gateway import get_llm, invoke_structured
 
 SYSTEM_PROMPT = """You are the Risk & Ambiguity Agent in a contract review pipeline.
 You are given the extracted clause values for a contract and the firm's playbook -
@@ -46,13 +46,15 @@ def run(
     playbook: list[dict],
     provider: str | None = None,
     model: str | None = None,
-) -> RiskAssessmentResult:
-    llm = get_llm(provider, model).with_structured_output(RiskAssessmentResult)
-    chain = _prompt | llm
-    return chain.invoke(
+) -> tuple[RiskAssessmentResult, dict]:
+    llm = get_llm(provider, model)
+    return invoke_structured(
+        _prompt,
+        llm,
+        RiskAssessmentResult,
         {
             "playbook": json.dumps(playbook, indent=2),
             "clauses": json.dumps(clauses.model_dump(), indent=2),
             "low_confidence": json.dumps(clauses.low_confidence_flags),
-        }
+        },
     )

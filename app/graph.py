@@ -6,7 +6,10 @@ into state; the graph just sequences them and branches on whether a prior
 contract version exists (skip the Diff Agent entirely when there isn't one).
 
 Every specialist-agent node also writes an audit log entry (timestamp, input
-hash, output, confidence) — see app/services/audit.py.
+hash, output, confidence, token usage) — see app/services/audit.py. The
+caller (app/pipeline_runner.py) streams this graph node-by-node and commits
+the owning Contract row's fields after each step, so a dropped connection or
+a mid-run crash loses nothing that already completed.
 """
 from typing import Any, TypedDict
 
@@ -33,7 +36,9 @@ class PipelineState(TypedDict, total=False):
     provider: str | None
     model: str | None
     db: Session  # not persisted - passed through so nodes can query/create rows mid-pipeline
-    request_id: str  # groups this run's audit log rows before a contract_id exists
+    request_id: str
+    contract_id: str
+    performed_by: str | None
 
     intake: IntakeResult
     client_profile_id: str
@@ -48,11 +53,13 @@ class PipelineState(TypedDict, total=False):
 
 
 def _run_intake(state: PipelineState) -> dict[str, Any]:
-    result = intake.run(state["contract_text"], state.get("provider"), state.get("model"))
+    result, usage = intake.run(state["contract_text"], state.get("provider"), state.get("model"))
     log_agent_call(
-        state["db"], state["request_id"], "intake",
+        state["db"], state["request_id"], state["contract_id"], "intake",
         input_data={"contract_text": state["contract_text"]},
         output_data=result.model_dump(),
+        performed_by=state.get("performed_by"),
+        **usage,
     )
     return {"intake": result}
 
@@ -60,7 +67,9 @@ def _run_intake(state: PipelineState) -> dict[str, Any]:
 def _run_match_client(state: PipelineState) -> dict[str, Any]:
     db = state["db"]
     profile = find_or_create_client_profile(db, state["intake"].client_name)
-    prior = find_prior_contract(db, profile.id, state["intake"].contract_type)
+    prior = find_prior_contract(
+        db, profile.id, state["intake"].contract_type, exclude_contract_id=state["contract_id"]
+    )
     return {
         "client_profile_id": profile.id,
         "is_renewal_of": prior.id if prior else None,
@@ -69,12 +78,14 @@ def _run_match_client(state: PipelineState) -> dict[str, Any]:
 
 
 def _run_extraction(state: PipelineState) -> dict[str, Any]:
-    result = extraction.run(state["contract_text"], state.get("provider"), state.get("model"))
+    result, usage = extraction.run(state["contract_text"], state.get("provider"), state.get("model"))
     log_agent_call(
-        state["db"], state["request_id"], "clause_extraction",
+        state["db"], state["request_id"], state["contract_id"], "clause_extraction",
         input_data={"contract_text": state["contract_text"]},
         output_data=result.model_dump(),
         confidence=result.auto_renewal.confidence,
+        performed_by=state.get("performed_by"),
+        **usage,
     )
     return {"clauses": result}
 
@@ -84,32 +95,36 @@ def _has_prior_version(state: PipelineState) -> str:
 
 
 def _run_diff(state: PipelineState) -> dict[str, Any]:
-    result = diff.run(
+    result, usage = diff.run(
         old_clauses=state["prior_clauses"],
         new_clauses=state["clauses"],
         provider=state.get("provider"),
         model=state.get("model"),
     )
     log_agent_call(
-        state["db"], state["request_id"], "diff",
+        state["db"], state["request_id"], state["contract_id"], "diff",
         input_data={"prior_clauses": state["prior_clauses"], "new_clauses": state["clauses"].model_dump()},
         output_data=result.model_dump(),
+        performed_by=state.get("performed_by"),
+        **usage,
     )
     return {"diff": result}
 
 
 def _run_risk(state: PipelineState) -> dict[str, Any]:
     playbook = load_playbook()
-    result = risk.run(
+    result, usage = risk.run(
         clauses=state["clauses"],
         playbook=playbook,
         provider=state.get("provider"),
         model=state.get("model"),
     )
     log_agent_call(
-        state["db"], state["request_id"], "risk_ambiguity",
+        state["db"], state["request_id"], state["contract_id"], "risk_ambiguity",
         input_data={"clauses": state["clauses"].model_dump(), "playbook": playbook},
         output_data=result.model_dump(),
+        performed_by=state.get("performed_by"),
+        **usage,
     )
     return {"risk": result}
 
@@ -121,29 +136,31 @@ def _run_deadline(state: PipelineState) -> dict[str, Any]:
         auto_renewal=state["clauses"].auto_renewal,
     )
     log_agent_call(
-        state["db"], state["request_id"], "deadline",
+        state["db"], state["request_id"], state["contract_id"], "deadline",
         input_data={
             "effective_date": state["intake"].effective_date,
             "term_length_months": state["intake"].term_length_months,
             "auto_renewal": state["clauses"].auto_renewal.model_dump(),
         },
         output_data=result.model_dump(),
+        performed_by=state.get("performed_by"),
     )
     return {"deadline": result}
 
 
 def _run_notify(state: PipelineState) -> dict[str, Any]:
-    result = notify.run(
+    result, usage = notify.run(
         intake=state["intake"],
         clauses=state["clauses"],
         diff=state.get("diff"),
         risk=state["risk"],
         deadline=state["deadline"],
+        prepared_by=state.get("performed_by"),
         provider=state.get("provider"),
         model=state.get("model"),
     )
     log_agent_call(
-        state["db"], state["request_id"], "notify_report",
+        state["db"], state["request_id"], state["contract_id"], "notify_report",
         input_data={
             "intake": state["intake"].model_dump(),
             "diff": state["diff"].model_dump() if state.get("diff") else None,
@@ -151,6 +168,8 @@ def _run_notify(state: PipelineState) -> dict[str, Any]:
             "deadline": state["deadline"].model_dump(),
         },
         output_data=result.model_dump(),
+        performed_by=state.get("performed_by"),
+        **usage,
     )
     return {"draft_email": result}
 

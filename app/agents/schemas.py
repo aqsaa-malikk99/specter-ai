@@ -62,7 +62,17 @@ class RiskAssessmentResult(BaseModel):
     summary: str = Field(description="One or two sentence overall risk summary")
 
 
-class DraftEmail(BaseModel):
+class DraftEmailContent(BaseModel):
+    """What the LLM actually produces. `status` is deliberately not part of
+    this schema - it's a fixed constant, not a model judgment call, and a
+    single-value Literal field has been observed to trip up structured output
+    on weaker models. It's attached in Python after parsing (see DraftEmail)."""
+
     subject: str
     body: str = Field(description="Plain-text email body summarizing the changelog, flagged risks, and upcoming deadline")
+
+
+class DraftEmail(BaseModel):
+    subject: str
+    body: str
     status: Literal["draft_awaiting_approval"] = "draft_awaiting_approval"

@@ -1,7 +1,8 @@
 """Append-only audit trail: one row per agent invocation (timestamp, input
-hash, output, confidence). Per the spec, this is what answers "who/what knew
-this and when" for SRA-style accountability — every node in the pipeline
-graph logs through here.
+hash, output, confidence, token usage). Per the spec, this is what answers
+"who/what knew this and when" for SRA-style accountability - every node in
+the pipeline graph logs through here as soon as it finishes, independent of
+whether later stages succeed.
 """
 import hashlib
 import json
@@ -20,24 +21,26 @@ def _hash_input(input_data: Any) -> str:
 def log_agent_call(
     db: Session,
     request_id: str,
+    contract_id: str,
     agent_name: str,
     input_data: Any,
     output_data: Any,
     confidence: float | None = None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+    performed_by: str | None = None,
 ) -> None:
     db.add(
         AuditLog(
             request_id=request_id,
+            contract_id=contract_id,
             agent_name=agent_name,
             input_hash=_hash_input(input_data),
             output=output_data,
             confidence=confidence,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            performed_by=performed_by,
         )
     )
     db.flush()
-
-
-def backfill_contract_id(db: Session, request_id: str, contract_id: str) -> None:
-    db.query(AuditLog).filter(AuditLog.request_id == request_id).update(
-        {AuditLog.contract_id: contract_id}
-    )

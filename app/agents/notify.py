@@ -16,10 +16,11 @@ from app.agents.schemas import (
     DeadlineResult,
     DiffResult,
     DraftEmail,
+    DraftEmailContent,
     IntakeResult,
     RiskAssessmentResult,
 )
-from app.llm_gateway import get_llm
+from app.llm_gateway import get_llm, invoke_structured
 
 SYSTEM_PROMPT = """You are the Notify/Report Agent in a contract review pipeline. You are
 given the structured outputs of the earlier agents in this pipeline (intake, clause
@@ -54,16 +55,26 @@ def run(
     diff: DiffResult | None,
     risk: RiskAssessmentResult,
     deadline: DeadlineResult,
+    prepared_by: str | None = None,
     provider: str | None = None,
     model: str | None = None,
-) -> DraftEmail:
-    llm = get_llm(provider, model).with_structured_output(DraftEmail)
-    chain = _prompt | llm
-    return chain.invoke(
+) -> tuple[DraftEmail, dict]:
+    llm = get_llm(provider, model)
+    content, usage = invoke_structured(
+        _prompt,
+        llm,
+        DraftEmailContent,
         {
             "intake": json.dumps(intake.model_dump(), indent=2),
             "diff": json.dumps(diff.model_dump(), indent=2) if diff else "null",
             "risk": json.dumps(risk.model_dump(), indent=2),
             "deadline": json.dumps(deadline.model_dump(), indent=2),
-        }
+        },
     )
+    body = content.body
+    if prepared_by:
+        # Appended deterministically, not left to the model, so attribution is
+        # never inaccurate or omitted.
+        body += f"\n\n— Draft prepared by {prepared_by}, awaiting human approval."
+    result = DraftEmail(subject=content.subject, body=body)
+    return result, usage
