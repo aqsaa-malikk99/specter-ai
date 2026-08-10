@@ -47,3 +47,26 @@ class Contract(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     client_profile: Mapped[ClientProfile | None] = relationship(back_populates="contracts")
+
+
+class AuditLog(Base):
+    """One row per agent invocation: who/what knew this and when.
+
+    Written during the pipeline run (keyed by request_id, since the Contract
+    row doesn't exist yet) and backfilled with contract_id once the contract
+    is persisted. This answers the spec's audit requirement without coupling
+    logging to a contract that may not exist yet if the pipeline errors out.
+    """
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    request_id: Mapped[str] = mapped_column(String, index=True)
+    contract_id: Mapped[str | None] = mapped_column(
+        ForeignKey("contracts.id"), nullable=True, index=True
+    )
+    agent_name: Mapped[str] = mapped_column(String, index=True)
+    input_hash: Mapped[str] = mapped_column(String)
+    output: Mapped[dict] = mapped_column(JSON)
+    confidence: Mapped[float | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

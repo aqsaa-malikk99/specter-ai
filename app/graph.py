@@ -4,6 +4,9 @@ Design principle from the spec: agents are specialists, the orchestrator is
 dumb on purpose. Each node calls one agent and merges its structured output
 into state; the graph just sequences them and branches on whether a prior
 contract version exists (skip the Diff Agent entirely when there isn't one).
+
+Every specialist-agent node also writes an audit log entry (timestamp, input
+hash, output, confidence) — see app/services/audit.py.
 """
 from typing import Any, TypedDict
 
@@ -19,6 +22,7 @@ from app.agents.schemas import (
     IntakeResult,
     RiskAssessmentResult,
 )
+from app.services.audit import log_agent_call
 from app.services.client_matching import find_or_create_client_profile
 from app.services.playbook import load_playbook
 from app.services.renewal_detection import find_prior_contract
@@ -29,6 +33,7 @@ class PipelineState(TypedDict, total=False):
     provider: str | None
     model: str | None
     db: Session  # not persisted - passed through so nodes can query/create rows mid-pipeline
+    request_id: str  # groups this run's audit log rows before a contract_id exists
 
     intake: IntakeResult
     client_profile_id: str
@@ -44,6 +49,11 @@ class PipelineState(TypedDict, total=False):
 
 def _run_intake(state: PipelineState) -> dict[str, Any]:
     result = intake.run(state["contract_text"], state.get("provider"), state.get("model"))
+    log_agent_call(
+        state["db"], state["request_id"], "intake",
+        input_data={"contract_text": state["contract_text"]},
+        output_data=result.model_dump(),
+    )
     return {"intake": result}
 
 
@@ -60,6 +70,12 @@ def _run_match_client(state: PipelineState) -> dict[str, Any]:
 
 def _run_extraction(state: PipelineState) -> dict[str, Any]:
     result = extraction.run(state["contract_text"], state.get("provider"), state.get("model"))
+    log_agent_call(
+        state["db"], state["request_id"], "clause_extraction",
+        input_data={"contract_text": state["contract_text"]},
+        output_data=result.model_dump(),
+        confidence=result.auto_renewal.confidence,
+    )
     return {"clauses": result}
 
 
@@ -74,15 +90,26 @@ def _run_diff(state: PipelineState) -> dict[str, Any]:
         provider=state.get("provider"),
         model=state.get("model"),
     )
+    log_agent_call(
+        state["db"], state["request_id"], "diff",
+        input_data={"prior_clauses": state["prior_clauses"], "new_clauses": state["clauses"].model_dump()},
+        output_data=result.model_dump(),
+    )
     return {"diff": result}
 
 
 def _run_risk(state: PipelineState) -> dict[str, Any]:
+    playbook = load_playbook()
     result = risk.run(
         clauses=state["clauses"],
-        playbook=load_playbook(),
+        playbook=playbook,
         provider=state.get("provider"),
         model=state.get("model"),
+    )
+    log_agent_call(
+        state["db"], state["request_id"], "risk_ambiguity",
+        input_data={"clauses": state["clauses"].model_dump(), "playbook": playbook},
+        output_data=result.model_dump(),
     )
     return {"risk": result}
 
@@ -92,6 +119,15 @@ def _run_deadline(state: PipelineState) -> dict[str, Any]:
         effective_date=state["intake"].effective_date,
         term_length_months=state["intake"].term_length_months,
         auto_renewal=state["clauses"].auto_renewal,
+    )
+    log_agent_call(
+        state["db"], state["request_id"], "deadline",
+        input_data={
+            "effective_date": state["intake"].effective_date,
+            "term_length_months": state["intake"].term_length_months,
+            "auto_renewal": state["clauses"].auto_renewal.model_dump(),
+        },
+        output_data=result.model_dump(),
     )
     return {"deadline": result}
 
@@ -105,6 +141,16 @@ def _run_notify(state: PipelineState) -> dict[str, Any]:
         deadline=state["deadline"],
         provider=state.get("provider"),
         model=state.get("model"),
+    )
+    log_agent_call(
+        state["db"], state["request_id"], "notify_report",
+        input_data={
+            "intake": state["intake"].model_dump(),
+            "diff": state["diff"].model_dump() if state.get("diff") else None,
+            "risk": state["risk"].model_dump(),
+            "deadline": state["deadline"].model_dump(),
+        },
+        output_data=result.model_dump(),
     )
     return {"draft_email": result}
 
